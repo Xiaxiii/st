@@ -4,10 +4,42 @@
     const ROOT = window.parent && window.parent.document ? window.parent : window;
     const DOC = ROOT.document;
     const EXTENSION_ID = 'infinite-economy-extension';
+    const scriptUrl = document.currentScript && document.currentScript.src ? document.currentScript.src : '';
+
+    async function loadCoreModule() {
+        const candidates = [];
+        if (scriptUrl) candidates.push(new URL('./core.js', scriptUrl).href);
+        for (const script of Array.from(DOC.scripts || [])) {
+            if (!script.src || !/\/index\.js(?:[?#]|$)/i.test(script.src)) continue;
+            candidates.push(new URL('./core.js', script.src).href);
+        }
+        const baseCandidates = [
+            '/scripts/extensions/third-party/st/core.js',
+            '/scripts/extensions/third-party/infinite-economy-extension/core.js'
+        ];
+        for (const path of baseCandidates) candidates.push(new URL(path, location.origin).href);
+        const urls = [...new Set(candidates)];
+        let lastError = null;
+        for (const url of urls) {
+            try {
+                const response = await fetch(url, { cache: 'no-store' });
+                if (!response.ok) continue;
+                const source = await response.text();
+                const moduleUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+                try {
+                    return await import(moduleUrl);
+                } finally {
+                    URL.revokeObjectURL(moduleUrl);
+                }
+            } catch (error) {
+                lastError = error;
+            }
+        }
+        throw lastError || new Error('找不到扩展核心文件 core.js');
+    }
 
     try {
-        const coreUrl = new URL('./core.js', document.currentScript && document.currentScript.src ? document.currentScript.src : location.href).href;
-        const core = await import(coreUrl);
+        const core = await loadCoreModule();
         if (ROOT.__INFINITE_ECONOMY_CLEANUP) ROOT.__INFINITE_ECONOMY_CLEANUP();
 
         const context = () => {
@@ -102,8 +134,7 @@
         }
 
         async function reconcileLatest() {
-            const changed = await reconcileChatHistory();
-            if (!changed) return;
+            await reconcileChatHistory();
             render();
             updatePrompt();
         }
@@ -140,6 +171,28 @@
             return state.items.map((item) => `<span class="ie-chip">${escapeHtml(item.name)} ×${escapeHtml(item.quantity || 1)}</span>`).join('');
         }
 
+        function renderInlineStatus() {
+            const candidates = Array.from(DOC.querySelectorAll('#chat .mes, .mes'));
+            let message = null;
+            for (let i = candidates.length - 1; i >= 0; i -= 1) {
+                const candidate = candidates[i];
+                if (candidate.classList.contains('is_user') || candidate.getAttribute('is_user') === 'true') continue;
+                message = candidate;
+                break;
+            }
+            if (!message) return;
+            const host = message.querySelector('.mes_text') || message;
+            let inline = message.querySelector('[data-ie-inline-status]');
+            if (!inline) {
+                inline = DOC.createElement('div');
+                inline.dataset.ieInlineStatus = 'true';
+                host.appendChild(inline);
+            }
+            const status = state.lastStatus || {};
+            const inventory = state.items.length ? state.items.map(item => `${escapeHtml(item.name)} ×${escapeHtml(item.quantity || 1)}`).join('　') : '无';
+            inline.innerHTML = `<div class="ie-inline-head"><span>∞ 程序状态</span><small>聊天独立账本</small></div><div class="ie-inline-grid"><span>积分 <b>${state.score.toLocaleString()}</b></span><span>冻结 <b>${state.frozenScore.toLocaleString()}</b></span><span>地点 <b>${escapeHtml(status.location || '回廊')}</b></span><span>任务 <b>${escapeHtml(status.task || '休整期')}</b></span></div><div class="ie-inline-line">道具：${inventory}</div>`;
+        }
+
         function render() {
             if (destroyed) return;
             const panel = DOC.getElementById('ie-panel');
@@ -162,6 +215,7 @@
             const warningEl = panel.querySelector('[data-role="warning"]');
             warningEl.textContent = warning;
             warningEl.hidden = !warning;
+            renderInlineStatus();
         }
 
         function makeUi() {
@@ -174,7 +228,7 @@
 #ie-panel{position:fixed;z-index:999989;width:min(380px,calc(100vw - 18px));max-height:min(82vh,720px);display:none;color:#f5f1e8;font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;filter:drop-shadow(0 24px 50px rgba(0,0,0,.5))}
 #ie-panel.ie-show{display:block}#ie-panel .ie-card{overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:linear-gradient(145deg,rgba(52,44,34,.98),rgba(22,22,25,.98));box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
 #ie-panel .ie-head{padding:15px 17px 13px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:flex-start;gap:11px}#ie-panel .ie-mark{width:32px;height:32px;flex:none;border-radius:10px;border:1px solid rgba(245,220,161,.35);display:flex;align-items:center;justify-content:center;color:#f5dca1;font-weight:800}#ie-panel .ie-title{font-family:"Noto Serif SC","Songti SC",serif;font-size:16px;font-weight:700;line-height:1.3}.ie-sub{margin-top:4px;color:#b9b0a1;font-size:10px}.ie-close{margin-left:auto;all:unset;width:26px;height:26px;border:1px solid rgba(255,255,255,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#b9b0a1}.ie-close:hover{color:#fff}
-#ie-panel .ie-body{max-height:calc(min(82vh,720px) - 66px);overflow:auto;padding:13px 14px 15px}.ie-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.ie-stat{padding:10px 8px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(255,255,255,.045);text-align:center}.ie-label{color:#aa9f91;font-size:9px;letter-spacing:.08em}.ie-value{margin-top:5px;color:#fbf3dc;font:700 17px/1.1 "JetBrains Mono",monospace;overflow-wrap:anywhere}.ie-value.gold{color:#f5dca1}.ie-section{margin:14px 1px 7px;color:#e8c985;font-size:9px;letter-spacing:.2em}.ie-info{display:grid;grid-template-columns:1fr 1fr;gap:7px}.ie-line{min-width:0;padding:9px 10px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:rgba(255,255,255,.035)}.ie-line b{display:block;margin-top:4px;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.ie-chips{display:flex;gap:6px;flex-wrap:wrap}.ie-chip{padding:4px 8px;border:1px solid rgba(158,224,184,.25);border-radius:14px;background:rgba(158,224,184,.06);font-size:10px;color:#c8dfcf}.ie-form{display:grid;grid-template-columns:1.2fr .8fr;gap:7px}.ie-form input,.ie-form select,.ie-form button{width:100%;min-height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(9,10,12,.45);color:#f5f1e8;padding:7px 9px;font:inherit;font-size:11px}.ie-form button{cursor:pointer;background:rgba(245,220,161,.12);border-color:rgba(245,220,161,.32);color:#f5dca1;font-weight:700}.ie-form button:hover{background:rgba(245,220,161,.2)}.ie-form .wide{grid-column:1/-1}.ie-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.ie-actions button{min-height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.055);color:#eee6d7;cursor:pointer;font-size:11px}.ie-actions button:hover{border-color:rgba(245,220,161,.4)}.ie-ledger{display:flex;flex-direction:column;gap:5px}.ie-ledger-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.035);font-size:10px}.ie-ledger-row b{font:700 11px "JetBrains Mono",monospace}.ie-ledger-row b.gain{color:#9ee0b8}.ie-ledger-row b.loss{color:#efaa9d}.ie-ledger-row b.neutral{color:#c8c0b0}.ie-ledger-row small{color:#a99f90;font:10px "JetBrains Mono",monospace}.ie-empty,.ie-muted{color:#9c9388;font-size:10px}.ie-warning{margin-top:8px;padding:8px 9px;border:1px solid rgba(239,194,115,.35);border-radius:8px;color:#f1c981;background:rgba(239,194,115,.08);font-size:10px;line-height:1.5}.ie-hint{margin-top:8px;color:#999184;font-size:9px;line-height:1.5}@media(max-width:360px){.ie-grid{grid-template-columns:1fr 1fr}.ie-grid .ie-stat:last-child{grid-column:1/-1}}
+#ie-panel .ie-body{max-height:calc(min(82vh,720px) - 66px);overflow:auto;padding:13px 14px 15px}.ie-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.ie-stat{padding:10px 8px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(255,255,255,.045);text-align:center}.ie-label{color:#aa9f91;font-size:9px;letter-spacing:.08em}.ie-value{margin-top:5px;color:#fbf3dc;font:700 17px/1.1 "JetBrains Mono",monospace;overflow-wrap:anywhere}.ie-value.gold{color:#f5dca1}.ie-section{margin:14px 1px 7px;color:#e8c985;font-size:9px;letter-spacing:.2em}.ie-info{display:grid;grid-template-columns:1fr 1fr;gap:7px}.ie-line{min-width:0;padding:9px 10px;border:1px solid rgba(255,255,255,.09);border-radius:10px;background:rgba(255,255,255,.035)}.ie-line b{display:block;margin-top:4px;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.ie-chips{display:flex;gap:6px;flex-wrap:wrap}.ie-chip{padding:4px 8px;border:1px solid rgba(158,224,184,.25);border-radius:14px;background:rgba(158,224,184,.06);font-size:10px;color:#c8dfcf}.ie-form{display:grid;grid-template-columns:1.2fr .8fr;gap:7px}.ie-form input,.ie-form select,.ie-form button{width:100%;min-height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(9,10,12,.45);color:#f5f1e8;padding:7px 9px;font:inherit;font-size:11px}.ie-form button{cursor:pointer;background:rgba(245,220,161,.12);border-color:rgba(245,220,161,.32);color:#f5dca1;font-weight:700}.ie-form button:hover{background:rgba(245,220,161,.2)}.ie-form .wide{grid-column:1/-1}.ie-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}.ie-actions button{min-height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.055);color:#eee6d7;cursor:pointer;font-size:11px}.ie-actions button:hover{border-color:rgba(245,220,161,.4)}.ie-ledger{display:flex;flex-direction:column;gap:5px}.ie-ledger-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.035);font-size:10px}.ie-ledger-row b{font:700 11px "JetBrains Mono",monospace}.ie-ledger-row b.gain{color:#9ee0b8}.ie-ledger-row b.loss{color:#efaa9d}.ie-ledger-row b.neutral{color:#c8c0b0}.ie-ledger-row small{color:#a99f90;font:10px "JetBrains Mono",monospace}.ie-empty,.ie-muted{color:#9c9388;font-size:10px}.ie-warning{margin-top:8px;padding:8px 9px;border:1px solid rgba(239,194,115,.35);border-radius:8px;color:#f1c981;background:rgba(239,194,115,.08);font-size:10px;line-height:1.5}.ie-hint{margin-top:8px;color:#999184;font-size:9px;line-height:1.5}.ie-inline-status{margin:12px 0 4px;padding:10px 12px;border:1px solid rgba(190,165,110,.4);border-radius:10px;background:linear-gradient(145deg,rgba(55,46,34,.95),rgba(25,24,26,.95));color:#eee4cf;box-shadow:0 8px 20px rgba(0,0,0,.22);font-family:"Noto Sans SC","Microsoft YaHei",sans-serif}.ie-inline-head{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#f5dca1;font-weight:700;font-size:12px}.ie-inline-head small{color:#aaa091;font-weight:400;font-size:9px}.ie-inline-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}.ie-inline-grid span,.ie-inline-line{min-width:0;color:#aca294;font-size:9px;line-height:1.45}.ie-inline-grid b{display:block;margin-top:2px;color:#fff5df;font:700 11px "JetBrains Mono",monospace;overflow-wrap:anywhere}.ie-inline-line{margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.1);overflow-wrap:anywhere}@media(max-width:520px){.ie-inline-grid{grid-template-columns:1fr 1fr}}@media(max-width:360px){.ie-grid{grid-template-columns:1fr 1fr}.ie-grid .ie-stat:last-child{grid-column:1/-1}}
 `;
             DOC.head.appendChild(style);
 
@@ -370,5 +424,14 @@
         };
     } catch (error) {
         console.error('[Infinite Economy] failed to initialize', error);
+        try {
+            const existing = DOC.getElementById('ie-load-error');
+            if (existing) existing.remove();
+            const notice = DOC.createElement('div');
+            notice.id = 'ie-load-error';
+            notice.textContent = `Infinite Economy 加载失败：${error.message || error}`;
+            notice.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:999999;max-width:360px;padding:12px 14px;border:1px solid #c98b72;border-radius:10px;background:#2a1d1a;color:#ffe2d5;font:12px/1.5 sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3)';
+            DOC.body.appendChild(notice);
+        } catch (noticeError) {}
     }
 })();
