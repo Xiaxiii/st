@@ -12,6 +12,7 @@ SillyTavern extension for an infinite-flow card. It keeps a chat-scoped economic
 - State context injection through `setExtensionPrompt` so the next generation sees the authoritative ledger.
 - History replay on startup/chat switch to reduce long-chat memory loss.
 - Export JSON ledger.
+- Click the floating `∞` button to open the live state and casino panel. The inline message status block is disabled to avoid duplicate UI.
 
 ## Install
 
@@ -20,7 +21,7 @@ SillyTavern extension for an infinite-flow card. It keeps a chat-scoped economic
 3. Paste the Git URL.
 4. Enable `Infinite Economy & State`.
 
-The repository must contain `manifest.json`, `index.js`, `core.js`, and `style.css` in its root.
+The repository must contain `manifest.json`, `index.js`, `core.js`, and `style.css` in its root. After updates, reinstall or update the extension from GitHub so the displayed version changes.
 
 ## Card compatibility
 
@@ -37,7 +38,7 @@ The extension is designed for the supplied `♾️` card. It reads these fields 
 - `道具`
 - `在场`
 
-The extension's program ledger is authoritative for score, frozen score, inventory, and active games. The original card may still render its own `<状态栏>` beautifier; the new extension panel is intentionally separate, so it does not collide with the existing `状态栏` and `直播` regex scripts.
+The extension's program ledger is authoritative for score, frozen score, inventory, and active games. The original card may still render its own `<状态栏>` beautifier; the extension panel is opened from the floating `∞` button, so it does not add a second status block into the message body or collide with the existing `状态栏` and `直播` regex scripts.
 
 ## Economy synchronization
 

@@ -171,28 +171,6 @@
             return state.items.map((item) => `<span class="ie-chip">${escapeHtml(item.name)} ×${escapeHtml(item.quantity || 1)}</span>`).join('');
         }
 
-        function renderInlineStatus() {
-            const candidates = Array.from(DOC.querySelectorAll('#chat .mes, .mes'));
-            let message = null;
-            for (let i = candidates.length - 1; i >= 0; i -= 1) {
-                const candidate = candidates[i];
-                if (candidate.classList.contains('is_user') || candidate.getAttribute('is_user') === 'true') continue;
-                message = candidate;
-                break;
-            }
-            if (!message) return;
-            const host = message.querySelector('.mes_text') || message;
-            let inline = message.querySelector('[data-ie-inline-status]');
-            if (!inline) {
-                inline = DOC.createElement('div');
-                inline.dataset.ieInlineStatus = 'true';
-                host.appendChild(inline);
-            }
-            const status = state.lastStatus || {};
-            const inventory = state.items.length ? state.items.map(item => `${escapeHtml(item.name)} ×${escapeHtml(item.quantity || 1)}`).join('　') : '无';
-            inline.innerHTML = `<div class="ie-inline-head"><span>∞ 程序状态</span><small>聊天独立账本</small></div><div class="ie-inline-grid"><span>积分 <b>${state.score.toLocaleString()}</b></span><span>冻结 <b>${state.frozenScore.toLocaleString()}</b></span><span>地点 <b>${escapeHtml(status.location || '回廊')}</b></span><span>任务 <b>${escapeHtml(status.task || '休整期')}</b></span></div><div class="ie-inline-line">道具：${inventory}</div>`;
-        }
-
         function render() {
             if (destroyed) return;
             const panel = DOC.getElementById('ie-panel');
@@ -215,15 +193,15 @@
             const warningEl = panel.querySelector('[data-role="warning"]');
             warningEl.textContent = warning;
             warningEl.hidden = !warning;
-            renderInlineStatus();
         }
 
         function makeUi() {
+            DOC.querySelectorAll('[data-ie-inline-status]').forEach((element) => element.remove());
             const style = DOC.createElement('style');
             style.id = 'ie-style';
             style.textContent = `
 #ie-ball,#ie-panel,#ie-panel *{box-sizing:border-box}
-#ie-ball{position:fixed;right:22px;top:210px;z-index:999990;width:50px;height:50px;border:1px solid rgba(235,200,120,.55);border-radius:14px;background:linear-gradient(145deg,#382d20,#17161a);color:#f5dca1;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 20px -7px rgba(235,200,120,.85);font:700 12px/1 "JetBrains Mono",monospace;user-select:none;touch-action:none}
+#ie-ball{position:fixed;right:22px;top:210px;z-index:2147483647;pointer-events:auto;width:56px;height:56px;border:1px solid rgba(235,200,120,.55);border-radius:14px;background:linear-gradient(145deg,#382d20,#17161a);color:#f5dca1;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 12px 28px rgba(0,0,0,.45),0 0 20px -7px rgba(235,200,120,.85);font:700 12px/1 "JetBrains Mono",monospace;user-select:none;touch-action:none}
 #ie-ball:hover{border-color:#f5dca1} #ie-ball.ie-dragging{transition:none;transform:scale(1.03)}
 #ie-panel{position:fixed;z-index:999989;width:min(380px,calc(100vw - 18px));max-height:min(82vh,720px);display:none;color:#f5f1e8;font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;filter:drop-shadow(0 24px 50px rgba(0,0,0,.5))}
 #ie-panel.ie-show{display:block}#ie-panel .ie-card{overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:linear-gradient(145deg,rgba(52,44,34,.98),rgba(22,22,25,.98));box-shadow:inset 0 1px 0 rgba(255,255,255,.16)}
@@ -235,13 +213,14 @@
             const ball = DOC.createElement('button');
             ball.id = 'ie-ball';
             ball.type = 'button';
-            ball.title = '打开无限流经济状态';
-            ball.textContent = '∞ ¥';
+            ball.title = '打开无限流状态与赌场';
+            ball.setAttribute('aria-label', '打开无限流状态与赌场');
+            ball.textContent = '∞';
             DOC.body.appendChild(ball);
 
             const panel = DOC.createElement('div');
             panel.id = 'ie-panel';
-            panel.innerHTML = `<div class="ie-card"><div class="ie-head"><div class="ie-mark">∞</div><div><div class="ie-title">无限流经济状态</div><div class="ie-sub">程序账本 · 正文同步 · 聊天独立</div></div><button class="ie-close" data-role="close" type="button" aria-label="关闭">×</button></div><div class="ie-body"><div class="ie-grid"><div class="ie-stat"><div class="ie-label">可用积分</div><div class="ie-value gold" data-role="score">0</div></div><div class="ie-stat"><div class="ie-label">冻结积分</div><div class="ie-value" data-role="frozen">0</div></div><div class="ie-stat"><div class="ie-label">总资产</div><div class="ie-value" data-role="asset">0</div></div></div><div class="ie-section">当前剧情</div><div class="ie-info"><div class="ie-line"><span class="ie-label">地点</span><b data-role="location">回廊</b></div><div class="ie-line"><span class="ie-label">时间</span><b data-role="time">无</b></div><div class="ie-line"><span class="ie-label">等级 / 位格</span><b><span data-role="level">D</span> / <span data-role="rank">未知</span></b></div><div class="ie-line"><span class="ie-label">任务</span><b data-role="task">休整期</b></div><div class="ie-line"><span class="ie-label">待清算</span><b data-role="pending">无</b></div><div class="ie-line"><span class="ie-label">在场</span><b data-role="presence">无</b></div></div><div class="ie-section">道具库存</div><div class="ie-chips" data-role="items"></div><div class="ie-section">快速下注</div><div class="ie-form"><select data-role="game"><option value="dice-high">骰子·比大小</option><option value="odd-even">骰子·猜单双</option><option value="slots">老虎机</option><option value="blackjack">简易21点</option></select><input data-role="bet" type="number" min="1" step="1" placeholder="下注积分"><button class="wide" data-role="play" type="button">下注并立即开局</button></div><div class="ie-section">托管交易</div><div class="ie-form"><select data-role="trade-direction"><option value="in">收入 / 对方支付</option><option value="out">支出 / 支付对方</option></select><input data-role="trade-amount" type="number" min="1" step="1" placeholder="交易金额"><input class="wide" data-role="trade-reason" type="text" placeholder="交易说明，例如：购买治疗针"><button class="wide" data-role="trade" type="button">确认托管结算</button></div><div class="ie-actions"><button data-role="settle" type="button">查看当前赌局</button><button data-role="export" type="button">导出账本</button></div><div class="ie-section">最近流水</div><div class="ie-ledger" data-role="ledger"></div><div class="ie-warning" data-role="warning" hidden></div><div class="ie-hint">正文中出现“输了300积分 / 获得500积分 / 积分：700（↓300）”时，下一次刷新会自动记入账本。状态栏中的积分仅作核对，账本优先。</div></div></div>`;
+            panel.innerHTML = `<div class="ie-card"><div class="ie-head"><div class="ie-mark">∞</div><div><div class="ie-title">无限流状态与赌场</div><div class="ie-sub">程序账本 · 正文同步 · 聊天独立</div></div><button class="ie-close" data-role="close" type="button" aria-label="关闭">×</button></div><div class="ie-body"><div class="ie-grid"><div class="ie-stat"><div class="ie-label">可用积分</div><div class="ie-value gold" data-role="score">0</div></div><div class="ie-stat"><div class="ie-label">冻结积分</div><div class="ie-value" data-role="frozen">0</div></div><div class="ie-stat"><div class="ie-label">总资产</div><div class="ie-value" data-role="asset">0</div></div></div><div class="ie-section">当前剧情</div><div class="ie-info"><div class="ie-line"><span class="ie-label">地点</span><b data-role="location">回廊</b></div><div class="ie-line"><span class="ie-label">时间</span><b data-role="time">无</b></div><div class="ie-line"><span class="ie-label">等级 / 位格</span><b><span data-role="level">D</span> / <span data-role="rank">未知</span></b></div><div class="ie-line"><span class="ie-label">任务</span><b data-role="task">休整期</b></div><div class="ie-line"><span class="ie-label">待清算</span><b data-role="pending">无</b></div><div class="ie-line"><span class="ie-label">在场</span><b data-role="presence">无</b></div></div><div class="ie-section">道具库存</div><div class="ie-chips" data-role="items"></div><div class="ie-section">快速下注</div><div class="ie-form"><select data-role="game"><option value="dice-high">骰子·比大小</option><option value="odd-even">骰子·猜单双</option><option value="slots">老虎机</option><option value="blackjack">简易21点</option></select><input data-role="bet" type="number" min="1" step="1" placeholder="下注积分"><button class="wide" data-role="play" type="button">下注并立即开局</button></div><div class="ie-section">托管交易</div><div class="ie-form"><select data-role="trade-direction"><option value="in">收入 / 对方支付</option><option value="out">支出 / 支付对方</option></select><input data-role="trade-amount" type="number" min="1" step="1" placeholder="交易金额"><input class="wide" data-role="trade-reason" type="text" placeholder="交易说明，例如：购买治疗针"><button class="wide" data-role="trade" type="button">确认托管结算</button></div><div class="ie-actions"><button data-role="settle" type="button">查看当前赌局</button><button data-role="export" type="button">导出账本</button></div><div class="ie-section">最近流水</div><div class="ie-ledger" data-role="ledger"></div><div class="ie-warning" data-role="warning" hidden></div><div class="ie-hint">正文中出现“输了300积分 / 获得500积分 / 积分：700（↓300）”时，下一次刷新会自动记入账本。状态栏中的积分仅作核对，账本优先。</div></div></div>`;
             DOC.body.appendChild(panel);
             return { ball, panel, style };
         }
@@ -283,7 +262,7 @@
             listeners.push(() => target.removeEventListener(type, handler, options));
         };
 
-        addListener(ui.ball, 'click', () => { if (!drag) setOpen(!open); });
+        addListener(ui.ball, 'click', (event) => { event.stopPropagation(); if (!drag) setOpen(!open); });
         addListener(ui.panel, 'click', (event) => event.stopPropagation());
         addListener(ui.panel.querySelector('[data-role="close"]'), 'click', () => setOpen(false));
         addListener(DOC, 'click', () => setOpen(false));
